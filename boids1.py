@@ -1,8 +1,9 @@
 import numpy as np
 import pygame
 import random
+import math
 
-width, height = 900,650
+width, height = 900,700
 pygame.init()
 screen= pygame.display.set_mode((width,height)) #initialising pygame display
 clock = pygame.time.Clock()
@@ -12,7 +13,44 @@ class Agent:
         self.position=np.array([x,y], dtype=np.float64) # x is in x direction, y is in y direction but down (inverted)
         self.velocity=np.array([random.uniform(-2,2), random.uniform(-2,2)], dtype=np.float64) #initialising random velocity between -2 and 2
         self.speed=speed #speed constant thats just multiplied to the velocity
-
+    
+        
+    def get_nearest_neighbour(self, agents):
+        def euclidean_distance(agent1, agent2):
+            x1= agent1.position[0]-agent2.position[0]
+            y1= agent1.position[1]-agent2.position[1]
+            return math.sqrt((x1*x1)+(y1*y1))
+        nearest_neighbour=None
+        smallest_distance=float(100000000000000)
+        for i in agents:
+            if i!=self:
+                current_distance = euclidean_distance(self, i)
+                if current_distance < smallest_distance:
+                        nearest_neighbour = i
+                        smallest_distance = current_distance
+        return nearest_neighbour, smallest_distance    
+                
+    def separation(self, agents):
+        neighbour, dist = self.get_nearest_neighbour(agents)
+        separation_threshold = 60  # adjust as needed
+        if neighbour and dist < separation_threshold:
+            # Create a repulsion vector pointing away from the nearest neighbor
+            repulsion = self.position - neighbour.position
+            # Normalize and scale the repulsion vector
+            if dist > 0:
+                # Limit the maximum magnitude of repulsion
+                max_repulsion = 1.0  # Adjust this value to control maximum repulsion strength
+                repulsion_magnitude = min(max_repulsion, (separation_threshold - dist) / separation_threshold)
+                # Normalize repulsion vector
+                repulsion_direction = repulsion / dist
+                # Apply scaled repulsion
+                self.velocity += repulsion_direction * repulsion_magnitude
+            
+        # Optional: Limit overall velocity
+        max_velocity = 5.0  # Adjust as needed
+        velocity_magnitude = np.linalg.norm(self.velocity)
+        if velocity_magnitude > max_velocity:
+            self.velocity = (self.velocity / velocity_magnitude) * max_velocity
     def update(self):
         self.position+=self.velocity*self.speed #move current direction heading
 
@@ -38,10 +76,10 @@ class Agent:
             pygame.draw.line(screen, (255, 0, 0), pos, end_pos, 2)
 
 agents=[]
-for x in range(100): #creating agents through the class and adding them to array
+for x in range(50): #creating agents through the class and adding them to array
     x=random.randint(0,width)
     y=random.randint(0,height)
-    speed=4
+    speed=1
     new_agent=Agent(x,y,speed)
     agents.append(new_agent)
 
@@ -55,6 +93,7 @@ while running: #while loop to just run pygame environment and add objects to scr
     
     for agent in agents:
         agent.update()
+        agent.separation(agents)
         agent.draw(screen)
     
     pygame.display.flip()
