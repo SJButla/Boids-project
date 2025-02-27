@@ -13,22 +13,22 @@ class Agent:
         self.position=np.array([x,y], dtype=np.float64) # x is in x direction, y is in y direction but down (inverted)
         self.velocity=np.array([random.uniform(-2,2), random.uniform(-2,2)], dtype=np.float64) #initialising random velocity between -2 and 2
         self.speed=speed #speed constant thats just multiplied to the velocity
-    
+        self.time_offset = random.uniform(0, 2 * math.pi)  
         
     def get_heading_angle(self):
         heading_angle=math.degrees(math.atan2(self.velocity[1], self.velocity[0])) #calculates heading angle through velocity coordinates
         normalised_angle = heading_angle %360
         return normalised_angle      
    
-    def euclidean_distance(agent1, agent2): #calculates direct euclidean distance
-        x1= agent1.position[0]-agent2.position[0]  
-        y1= agent1.position[1]-agent2.position[1]
+    def euclidean_distance(self, agent2): #calculates direct euclidean distance
+        x1= self.position[0]-agent2.position[0]  
+        y1= self.position[1]-agent2.position[1]
         return math.sqrt((x1*x1)+(y1*y1))
     
         
     def get_near_neighbours(self): #gets all neighbours in a predefined radius
         neighbours=[]
-        radius=50 #sets radius constant to 50
+        radius=40 #sets radius constant 
         for agent in agents: #loops through all agents in simulation
             if agent!=self: #checks theres no comparison to self
                 euclidean_dist= self.euclidean_distance(agent) #calculates the euclidean distance between two agents
@@ -95,28 +95,65 @@ class Agent:
         velocity_magnitude = np.linalg.norm(self.velocity) #prevents agents from accelerating too harshly
         if velocity_magnitude > max_velocity:
             self.velocity = (self.velocity / velocity_magnitude) * max_velocity #scales velocity down if too high but preserves direction
+    
+    def cohesion(self):
+        cohesion_list=self.viewable() #gets viewable neighbours in specified radius
+        if not cohesion_list:
+            return
+        x_total=0
+        y_total=0
+        for neighbour in cohesion_list:
+            x_total+=neighbour.position[0]
+            y_total+=neighbour.position[1]
         
-        
-    def update(self):
-        self.position+=self.velocity*self.speed #move current direction heading
-        if self.position[0]<=0:  # checks if agent is on y boundary
-            self.position[0]=0
-            self.velocity[0]*=-1 #reverses velocity
-        elif self.position[0]>=width: #checks if agent is on x boundary
-            self.position[0]=width
-            self.velocity[0]*=-1
-        elif self.position[1]<=0: #checks if agent is on y boundary
-            self.position[1]=0
-            self.velocity[1]*=-1 #reverses velocity
-        elif self.position[1]>height:  #checks if agent is on y boundary
-            self.position[1]=height
-            self.velocity[1]*=-1 #reverses velocity
+        average_position=np.array([x_total/len(cohesion_list),y_total/len(cohesion_list)], dtype=np.float64) 
+        position_difference = average_position - self.position       
+        distance = np.linalg.norm(position_difference)
+       
+        if distance > 0:
+            desired_velocity = (position_difference / distance) 
+        else:
+            desired_velocity = np.array([0.0, 0.0])  # No movement if we're at the target
 
+        # Calculate steering force (desired change in velocity)
+        difference_force = desired_velocity - self.velocity
+        steering_magnitude = np.linalg.norm(difference_force)
+        max_force = 0.03
+
+        # Limit the steering force
+        if steering_magnitude > max_force:
+            difference_force = (difference_force / steering_magnitude) * max_force
+
+        # Apply steering force to current velocity
+        self.velocity += difference_force
+
+        # Maintain consistent speed
+        speed = np.linalg.norm(self.velocity)
+        if speed > 0:
+            desired_speed = 2.0
+            self.velocity = (self.velocity / speed) * desired_speed
+            
+       
+       
+    def apply_random_movement(self):
+        current_time = pygame.time.get_ticks() * 0.001  #gets time in milliseconds
+        oscillation_x = math.sin(current_time + self.time_offset) * 0.01
+        oscillation_y = math.cos(current_time * 1.3 + self.time_offset) * 0.01
+        random_force = np.array([oscillation_x, oscillation_y])
+        self.velocity += random_force
+        
+            
+    def update(self):
+        self.position += self.velocity * self.speed  # move current direction heading
+        # Wrap around screen edges
+        self.position[0] = self.position[0] % width  # wrap horizontally
+        self.position[1] = self.position[1] % height
+        
+        
     def draw(self, screen):
         # Draw the agent as a white circle
         pos = self.position.astype(int)
         pygame.draw.circle(screen, (255, 255, 255), pos, 4)
-        
         # Draw line showing direction - increase the scaling factor
         direction_length = 15  # Increased from 5 to 15
         normalized_velocity = self.velocity / np.linalg.norm(self.velocity) if np.linalg.norm(self.velocity) > 0 else self.velocity
@@ -143,6 +180,8 @@ while running: #while loop to just run pygame environment and add objects to scr
         agent.update()
         agent.separation(agents)
         agent.alignment()
+        agent.cohesion()
+        agent.apply_random_movement()
         agent.draw(screen)
     
     pygame.display.flip()
