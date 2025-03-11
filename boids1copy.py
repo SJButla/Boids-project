@@ -85,7 +85,7 @@ class Agent:
                     repulsion_direction = repulsion / euclidean_dist #converts to unit vector
                     self.velocity += repulsion_direction * repulsion_magnitude # appliesrepulsion
                 
-        # limis overall velocity
+        # limits overall velocity
         current_speed = np.linalg.norm(self.velocity)
         if current_speed > 0:  # prevent division by zero
             original_speed = np.linalg.norm(original_velocity)
@@ -95,6 +95,7 @@ class Agent:
         velocity_magnitude = np.linalg.norm(self.velocity) #prevents agents from accelerating too harshly
         if velocity_magnitude > max_velocity:
             self.velocity = (self.velocity / velocity_magnitude) * max_velocity #scales velocity down if too high but preserves direction
+    
     
     def cohesion(self):
         cohesion_list=self.viewable() #gets viewable neighbours in specified radius
@@ -134,7 +135,6 @@ class Agent:
             self.velocity = (self.velocity / speed) * desired_speed
             
        
-       
     def apply_random_movement(self):
         current_time = pygame.time.get_ticks() * 0.001  #gets time in milliseconds
         oscillation_x = math.sin(current_time + self.time_offset) * 0.01
@@ -142,7 +142,22 @@ class Agent:
         random_force = np.array([oscillation_x, oscillation_y])
         self.velocity += random_force
         
-            
+    
+    def obstacle_avoidance(self, obstacles):
+        perception_radius = 50  
+        max_avoidance_force = 3.0
+        for obstacle in obstacles:
+            distance_obstacle = obstacle.position - self.position #calculates distance from agent to obstacle
+            distance = np.linalg.norm(distance_obstacle) #calculates absolute value of this distance
+            actual_distance = distance - obstacle.radius   #calculates actual absolute distance considering obstacle radius
+            if actual_distance < perception_radius:
+                if distance > 0:
+                    direction = distance_obstacle / distance #caclulates unit vecotr of velocity
+                strength = max_avoidance_force * (1.0 - actual_distance / perception_radius)**2 #calculates a quadratic scaling avoidance force based on how close the agent is to obstacle
+                self.velocity -= direction * strength #applies strength to velocity to steer away from obstacle 
+                if actual_distance < 10:
+                    self.velocity = -direction * 5.0 #increases force of maneuver if agent gets dangerously close
+
     def update(self):
         self.position += self.velocity * self.speed  # move current direction heading
         # Wrap around screen edges
@@ -151,16 +166,34 @@ class Agent:
         
         
     def draw(self, screen):
-        # Draw the agent as a white circle
+        # draw the agent as a white circle
         pos = self.position.astype(int)
         pygame.draw.circle(screen, (255, 255, 255), pos, 4)
-        # Draw line showing direction - increase the scaling factor
+        # draw line showing direction
         direction_length = 15  # Increased from 5 to 15
         normalized_velocity = self.velocity / np.linalg.norm(self.velocity) if np.linalg.norm(self.velocity) > 0 else self.velocity
         end_pos = pos + (normalized_velocity * direction_length)
         pygame.draw.line(screen, (255, 0, 0), pos, end_pos.astype(int), 2)
+    
 
+class Obstacles:
+    def __init__(self, x, y, radius): #intialisation function for obstacle class
+         self.position=np.array([x,y], dtype=np.float64)
+         self.radius=radius
+    
+    def draw(self, screen):
+        pos = self.position.astype(int)
+        pygame.draw.circle(screen, (0, 0, 255), pos, self.radius)
+        
 agents=[]
+obstacles=[]
+
+for i in range(7): #loop to initialise objects on pygame simulation
+    x = random.randint(0, width)
+    y = random.randint(0, height)
+    radius = random.randint(10, 30)
+    obstacles.append(Obstacles(x, y, radius))
+    
 for x in range(100): #creating agents through the class and adding them to array
     x=random.randint(0,width)
     y=random.randint(0,height)
@@ -182,8 +215,12 @@ while running: #while loop to just run pygame environment and add objects to scr
         agent.alignment()
         agent.cohesion()
         agent.apply_random_movement()
+        agent.obstacle_avoidance(obstacles)
         agent.draw(screen)
-    
+        
+    for obs in obstacles:
+        obs.draw(screen)
+        
     pygame.display.flip()
     clock.tick(60) #fps
 
