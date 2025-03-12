@@ -184,9 +184,80 @@ class Obstacles:
     def draw(self, screen):
         pos = self.position.astype(int)
         pygame.draw.circle(screen, (0, 0, 255), pos, self.radius)
+
+
+class predator:
+    def __init__(self, x, y, speed):
+        self.position=np.array([x,y], dtype=np.float64) # x is in x direction, y is in y direction but down (inverted)
+        self.velocity=np.array([random.uniform(-2,2), random.uniform(-2,2)], dtype=np.float64) #initialising random velocity between -2 and 2
+        self.speed=speed #speed constant thats just multiplied to the velocity
+        self.detection_radius=10  
+    
+    def update(self):
+        self.position += self.velocity * self.speed #updates velocity vector
+        # Wrap around screen edges
+        self.position[0] = self.position[0] % width
+        self.position[1] = self.position[1] % height
         
+    def hunt(self, agents):
+        closest_agent=None
+        min_distance=10000000
+        for agent in agents: #loops through all boids in simulation
+            dist = self.euclidean_distance(agent) #calculates distance to each one
+            if dist < min_distance: #updates closest with the closest agent
+                min_distance = dist #updates minimum distance
+                closest_agent = agent
+    
+        if closest_agent: #checks if there is a closest agent
+            direction = closest_agent.position - self.position #calculates direction to this agent
+            distance = np.linalg.norm(direction) #calculates distance by abs value of velocity
+            if distance>0: 
+                direction = direction / distance #calculates unit vector for velocity
+                self.velocity = direction * self.speed #sets predator to move in this direction
+    
+    def euclidean_distance(self, agent): # calculate distance to an agent
+        x1 = self.position[0] - agent.position[0]  
+        y1 = self.position[1] - agent.position[1]
+        return math.sqrt((x1*x1) + (y1*y1))
+    
+    def catch_fish(self, agents):
+        caught_fish=[]
+        for agent in agents: #loops through agents (fish)
+            if self.euclidean_distance(agent) < self.detection_radius: #if distance to agent is smaller than detection radius
+                caught_fish.append(agent) #add fish to caught list
+        return caught_fish
+ 
+    
+    def draw(self, screen):
+        pos = self.position.astype(int) #converts coordinates to int
+        if np.linalg.norm(self.velocity) > 0: #if predator moves, normalise its vector
+            direction = self.velocity / np.linalg.norm(self.velocity)
+        else:
+            direction = np.array([1, 0]) #else deafult to right direction
+            
+        angle = math.atan2(direction[1], direction[0])
+        size = 12  # size of the triangle
+        p1 = (pos[0] + size * math.cos(angle),  #calculations to point predator in direction of prey
+            pos[1] + size * math.sin(angle))
+        p2 = (pos[0] + size * math.cos(angle + 2.5), 
+            pos[1] + size * math.sin(angle + 2.5))
+        p3 = (pos[0] + size * math.cos(angle - 2.5), 
+            pos[1] + size * math.sin(angle - 2.5))
+
+        pygame.draw.polygon(screen, (0,0,255), [p1, p2, p3]) #draw to screen
+           
+     
 agents=[]
 obstacles=[]
+predators=[]
+
+for i in range(2): #loop to initialise predators in simulation
+    x = random.randint(0, width)
+    y = random.randint(0, height)
+    speed = 2.25  # set faster than regular agents
+    new_predator = predator(x, y, speed) 
+    predators.append(new_predator)
+    
 
 for i in range(7): #loop to initialise objects on pygame simulation
     x = random.randint(0, width)
@@ -208,7 +279,7 @@ while running: #while loop to just run pygame environment and add objects to scr
             running = False
     
     screen.fill((0, 0, 0))
-    
+    remove_agents=[]
     for agent in agents:
         agent.update()
         agent.separation(agents)
@@ -217,7 +288,20 @@ while running: #while loop to just run pygame environment and add objects to scr
         agent.apply_random_movement()
         agent.obstacle_avoidance(obstacles)
         agent.draw(screen)
-        
+    
+    for pred in predators: #loop to update predators
+        pred.update()
+        pred.hunt(agents) 
+        caught = pred.catch_fish(agents)
+        for fish in caught: #loops through fish in caught list
+            if fish not in remove_agents:
+                remove_agents.append(fish) #adds fish not already in remove_list to it
+        pred.draw(screen)
+    
+    for agent in remove_agents: #loops through caught fish list
+        if agent in agents:
+            agents.remove(agent)  #removes thhe fish in this list from the simulation
+            
     for obs in obstacles:
         obs.draw(screen)
         
