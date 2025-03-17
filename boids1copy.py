@@ -28,7 +28,7 @@ class Agent:
         
     def get_near_neighbours(self): #gets all neighbours in a predefined radius
         neighbours=[]
-        radius=40 #sets radius constant 
+        radius=70 #sets radius constant 
         for agent in agents: #loops through all agents in simulation
             if agent!=self: #checks theres no comparison to self
                 euclidean_dist= self.euclidean_distance(agent) #calculates the euclidean distance between two agents
@@ -157,7 +157,26 @@ class Agent:
                 self.velocity -= direction * strength #applies strength to velocity to steer away from obstacle 
                 if actual_distance < 10:
                     self.velocity = -direction * 5.0 #increases force of maneuver if agent gets dangerously close
-
+                    
+    def predator_avoidance(self, predators):
+        predator_range=50
+        max_avoidance_force=10.0
+        for pred in predators: #calculates distance to a predator
+            diff_x = pred.position[0] - self.position[0]
+            diff_y = pred.position[1] - self.position[1]
+            distance_predator = pred.position - self.position
+            distance = np.linalg.norm(distance_predator)
+            if distance<predator_range:
+                angle = math.degrees(math.atan2(diff_y, diff_x)) #calculate angle to predator
+                relative_angle = (angle - self.get_heading_angle()) % 360 #accounts for agents heading
+                if not(relative_angle >= 135 and relative_angle <= 225):
+                    if distance>0:
+                        direction = distance_predator / distance #calculates unit vector direction
+                    strength = max_avoidance_force * (1.0 - distance / predator_range)**2 #uses inverse square to calculate avoidance force
+                    self.velocity -= direction * strength #applies force to vector
+                    if distance < 30: #emergency escape response when predator is too close
+                        self.velocity = -direction * 8.0  
+                
     def update(self):
         self.position += self.velocity * self.speed  # move current direction heading
         # Wrap around screen edges
@@ -226,7 +245,7 @@ class predator:
             if self.euclidean_distance(agent) < self.detection_radius: #if distance to agent is smaller than detection radius
                 caught_fish.append(agent) #add fish to caught list
         return caught_fish
- 
+
     
     def draw(self, screen):
         pos = self.position.astype(int) #converts coordinates to int
@@ -287,6 +306,7 @@ while running: #while loop to just run pygame environment and add objects to scr
         agent.cohesion()
         agent.apply_random_movement()
         agent.obstacle_avoidance(obstacles)
+        agent.predator_avoidance(predators)
         agent.draw(screen)
     
     for pred in predators: #loop to update predators
@@ -302,8 +322,8 @@ while running: #while loop to just run pygame environment and add objects to scr
         if agent in agents:
             agents.remove(agent)  #removes thhe fish in this list from the simulation
             
-    for obs in obstacles:
-        obs.draw(screen)
+    #for obs in obstacles:
+    #    obs.draw(screen)
         
     pygame.display.flip()
     clock.tick(60) #fps
